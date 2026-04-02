@@ -4,4 +4,4 @@ Code for manuscript: A deterministic multiple-shift lattice algorithm for functi
 
 Author: Jiarui Du, Josef Dick
 
-[Arxiv](https://arxiv.org/abs/2604.01407)
+[Arxiv](https://arxiv.org/abs/2604.01146)
