@@ -50,6 +50,7 @@ if ~isprime(p1)
     p1 = next_prime(p1);
 end
 k = ceil(2 * (R - 1) * ln_V / (t * log(p1)));
+k = max(k,1);
 p_list_crt = next_k_primes(p1, k);
 
 % Initialize global best trackers with the theoretical worst-case fallback
