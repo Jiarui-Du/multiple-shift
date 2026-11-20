@@ -32,12 +32,12 @@ alpha = 1;         % Smoothness parameter
 threshold_t = 0.95; % Error tolerance controlling the condition number bound
 num_tasks = num_N * num_dims;
 
-% Pre-generate task list by flattening the loops for parfor efficiency
+% Pre-generate task list by flattening the loops
 [task_n_idx_grid, task_d_idx_grid] = meshgrid(1:num_N, 1:num_dims);
 task_n_indices = task_n_idx_grid(:);
 task_d_indices = task_d_idx_grid(:);
 
-%% 2. Pre-allocate Output Arrays (1D arrays to support parfor)
+%% 2. Pre-allocate Output Arrays
 res_S_prob       = zeros(num_tasks, 1);
 res_S_simp_prob  = zeros(num_tasks, 1);
 res_S_adap   = zeros(num_tasks, 1);
@@ -50,9 +50,9 @@ res_R      = zeros(num_tasks, 1);
 res_N_real = zeros(num_tasks, 1);
 res_nA     = zeros(num_tasks, 1);
 
-%% 3. Main Computation (Parallel Execution)
+%% 3. Main Computation (Serial Execution)
 tic;
-parfor k = 1:num_tasks
+for k = 1:num_tasks
     % Parse parameters for the current task
     d_idx = task_d_indices(k);
     n_idx = task_n_indices(k);
@@ -65,7 +65,8 @@ parfor k = 1:num_tasks
     % Construct generating vector and lattice fibers
     g = construct_generating_vector_cbc(N, d, gamma, alpha);
     M = find_M_optimal(N, d, alpha, gamma);
-    [A, fibers, ~] = construct_lattice_fibers(N, M, g, gamma, alpha);
+    A = construct_frequency_set(N, M, d, gamma, alpha);
+    [fibers, ~] = construct_lattice_fibers(A, g, N);
 
     pmin = floor((M*gamma(1))^(1/alpha))*floor((M*gamma(2))^(1/alpha))/N;    
 
@@ -91,7 +92,7 @@ parfor k = 1:num_tasks
     Y_simp_prob = rand(S_simp_prob, d);
 
     % --- Adaptive Deterministic Construction ---
-    [Y_adap, S_adap, ~] = adaptive_construction_new(d, A, fibers, R, threshold_t, pmin);
+    [Y_adap, S_adap, strategy_adap] = adaptive_construction_new(d, A, fibers, R, threshold_t, pmin);
     
     % Arrays to store the condition numbers for all N fibers
     cond_G_prob      = zeros(N, 1);
@@ -133,7 +134,10 @@ parfor k = 1:num_tasks
     res_S_prob(k)      = S_prob;
     res_S_simp_prob(k) = S_simp_prob;
     res_S_adap(k)  = S_adap;
-    fprintf('Completed N = %d, d = %d\n', N, d);
+    fprintf(['N=%d, d=%d, R=%d, |A|=%d | Adaptive: S=%d, max cond(G)=%.6g (%s)\n' ...
+        'Prob: S=%d, max cond(G)=%.6g | Simp. Prob: S=%d, max cond(G)=%.6g\n'], ...
+        N, d, R, nA, S_adap, res_cond_adap(k), short_strategy_name(strategy_adap), ...
+        S_prob, res_cond_prob(k), S_simp_prob, res_cond_simp_prob(k));
 end
 
 total_time = toc;
@@ -175,7 +179,7 @@ idx_N_max = num_N;
 N_exponents = log2(N_list);
 IN_exponents = round(N_exponents);
 
-figure('Position', [100, 100, 1200, 350]);
+figure('Position', [100, 100, 1200, 463]);
 
 % --- Panel 1: Scalability wrt Lattice Size N (Fixed d = 30) ---
 subplot(1, 3, 1);
@@ -196,7 +200,6 @@ title('$d=50$', 'Interpreter', 'latex');
 
 leg = legend('Probabilistic', 'Simplified Probabilistic','Adaptive', ...
     'Location', 'northwest', 'Interpreter', 'latex');
-set(leg, 'FontSize', 9);
 
 yyaxis right
 ax.YColor = [0, 0, 0];
@@ -249,5 +252,21 @@ ylabel('Max Fiber Length $R$', 'Interpreter', 'latex');
 ylim([0, max(Data.R(:,idx_N_max))+1]);
 
 set(findall(gcf,'-property','FontSize'),'FontSize', 15);
+set(leg, 'FontSize', 10);
 if ~exist('figs', 'dir'), mkdir('figs'); end
 print(gcf, 'figs/numerical_stability_comparison.eps', '-depsc', '-vector');
+
+function name = short_strategy_name(strategy)
+switch strategy
+    case 'Polynomial'
+        name = 'Poly';
+    case 'Single_Prime_Lattice'
+        name = 'Single';
+    case 'Multi_Prime_CRT_Greedy'
+        name = 'Greedy';
+    case 'Multi_Prime_CRT_Theoretical'
+        name = 'CRT';
+    otherwise
+        name = strategy;
+end
+end

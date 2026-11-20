@@ -1,10 +1,6 @@
-% RUN_S_TEST Evaluates the sampling complexity of different shift strategies.
-%
-% Purpose:
-%   Reproduces Figure 1 from the paper. It evaluates and compares the total 
-%   number of shifts S required by the polynomial curve strategy, 
-%   single-prime lattice strategy, and the adaptive deterministic 
-%   construction framework across varying lattice sizes N and dimensions d.
+% RUN_S_ADAPTIVE Runs the Figure 1 shift-count comparison with the current code.
+% Compares polynomial, single-prime/CRT, greedy multi-prime/CRT and adaptive
+% construction, and reports the maximum fiber length and stage timings.
 
 clear all;
 close all;
@@ -39,12 +35,12 @@ alpha = 1;
 t = 0.95;
 num_tasks = num_N * num_dims;
 
-% Pre-generate flat task grids for parfor efficiency
+% Pre-generate flat task grids
 [task_n_idx_grid, task_d_idx_grid] = meshgrid(1:num_N, 1:num_dims);
 task_n_indices = task_n_idx_grid(:);
 task_d_indices = task_d_idx_grid(:);
 
-%% 2. Pre-allocate Output Arrays (1D arrays to support parfor)
+%% 2. Pre-allocate Output Arrays
 res_S_poly = zeros(num_tasks, 1);
 res_S_adap  = zeros(num_tasks, 1);
 res_S_multi = zeros(num_tasks, 1);
@@ -53,6 +49,9 @@ res_S_crt  = zeros(num_tasks, 1);
 res_R      = zeros(num_tasks, 1);
 res_N_real = zeros(num_tasks, 1);
 res_nA     = zeros(num_tasks, 1);
+res_strategy_single = cell(num_tasks, 1);
+res_strategy_multi = cell(num_tasks, 1);
+res_strategy_adap = cell(num_tasks, 1);
 
 res_time = zeros(num_tasks, 1);
 res_time_poly = zeros(num_tasks, 1);
@@ -60,9 +59,9 @@ res_time_adap = zeros(num_tasks, 1);
 res_time_multi = zeros(num_tasks, 1);
 res_time_single  = zeros(num_tasks, 1);
 
-%% 3. Parallel Execution
-tic;
-parfor k = 1:num_tasks
+%% 3. Serial Execution
+total_clock = tic;
+for k = 1:num_tasks
     g = [];
     gamma = [];
     M = [];
@@ -80,14 +79,15 @@ parfor k = 1:num_tasks
     t0 = tic;
     g = construct_generating_vector_cbc(N, d, gamma, alpha);
     M = find_M_optimal(N, d, alpha, gamma);
-    [A, fibers, ~] = construct_lattice_fibers(N, M, g, gamma, alpha);
+    A = construct_frequency_set(N, M, d, gamma, alpha);
+    [fibers, ~] = construct_lattice_fibers(A, g, N);
     res_time(k) = toc(t0);
 
     pmin = floor((M*gamma(1))^(1/alpha))*floor((M*gamma(2))^(1/alpha))/N;
     
     fiber_lengths = cellfun(@length, fibers);
     R = max(fiber_lengths);
-    nA = length(A);
+    nA = size(A, 1);
     
     res_nA(k) = nA;
     res_R(k) = R;
@@ -100,17 +100,17 @@ parfor k = 1:num_tasks
     
     % --- Timing: Strategy B (Single-Prime / CRT Search) ---
     t2 = tic;
-    [~, S_single, S_crt] = search_crt_shifts(d, A, fibers, R, t);
+    [~, S_single, S_crt, strategy_single] = search_crt_shifts(d, A, fibers, R, t);
     res_time_single(k) = toc(t2);
     
     % --- Timing: Strategy C (Multi-Prime Greedy Search) ---
     t3 = tic;
-    [~, S_multi] = greedy_construction(d, A, fibers, R, t);
+    [~, S_multi, strategy_multi] = greedy_construction(d, A, fibers, R, t);
     res_time_multi(k) = toc(t3);
     
     % --- Timing: Algorithm 3 (Adaptive Deterministic Search) ---
     t4 = tic;
-    [~, S_adap, ~] = adaptive_construction_new(d, A, fibers, R, t, pmin);
+    [~, S_adap, strategy_adap] = adaptive_construction_new(d, A, fibers, R, t, pmin);
     res_time_adap(k) = toc(t4);   
 
     res_S_poly(k) = S_poly;
@@ -119,12 +119,23 @@ parfor k = 1:num_tasks
     res_S_crt(k) = S_crt;
     res_S_multi(k) = S_multi;
     
-    fprintf('N = %d, d = %d\n', N, d);
+    res_strategy_single{k} = strategy_single;
+    res_strategy_multi{k} = strategy_multi;
+    res_strategy_adap{k} = strategy_adap;
+    fprintf(['N=%d, d=%d, R=%d, |A|=%d | Common prep: %.6f s' ...
+        ' | Adaptive: S=%d, %.6f s (%s) | CRT budget: S=%d\n' ...
+        'Poly: S=%g, %.6f s | Single/CRT: S=%d, %.6f s (%s)' ...
+        ' | Greedy CRT: S=%d, %.6f s (%s)\n'], ...
+        N, d, R, nA, res_time(k), ...
+        S_adap, res_time_adap(k), short_strategy_name(strategy_adap), S_crt, ...
+        S_poly, res_time_poly(k), ...
+        S_single, res_time_single(k), short_strategy_name(strategy_single), ...
+        S_multi, res_time_multi(k), short_strategy_name(strategy_multi));
 
     if mod(k, 10) == 0; java.lang.System.gc(); end
 end
-total_time = toc;
-fprintf('Total parfor loop time: %.2f seconds\n', total_time);
+total_time = toc(total_clock);
+fprintf('Total serial loop time: %.2f seconds\n', total_time);
 
 %% 4. Data Restructuring & Saving
 Data.S_poly = reshape(res_S_poly, num_dims, num_N);
@@ -141,6 +152,9 @@ Data.time_poly = reshape(res_time_poly, num_dims, num_N);
 Data.time_single  = reshape(res_time_single, num_dims, num_N);
 Data.time_multi  = reshape(res_time_multi, num_dims, num_N);
 Data.time_adap  = reshape(res_time_adap, num_dims, num_N);
+Data.strategy_single = reshape(res_strategy_single, num_dims, num_N);
+Data.strategy_multi = reshape(res_strategy_multi, num_dims, num_N);
+Data.strategy_adap = reshape(res_strategy_adap, num_dims, num_N);
 
 %% Save result
 if ~exist('results', 'dir'), mkdir('results'); end
@@ -156,7 +170,7 @@ IN_exponents = round(N_exponents);
 
 idx_d_low  = find(d_vals == 2);   
 idx_d_high = find(d_vals == 50);  
-idx_N_max  = num_N; % N = 2^16
+idx_N_max  = num_N;
 
 colors = lines(7);
 c_poly = colors(1,:); 
@@ -167,7 +181,7 @@ c_multi = colors(4,:);
 lw = 1.5; 
 ms = 6;   
 
-figure('Position', [100, 100, 1200, 350]);
+figure('Position', [100, 100, 1200, 484]);
 
 % --- Panel 1: Low Dimension (d=2) vs N ---
 subplot(1, 3, 1);
@@ -186,9 +200,8 @@ xlabel('Base Lattice Size $N$', 'Interpreter', 'latex');
 ylabel('Number of Shifts $S$', 'Interpreter', 'latex');
 title('Low Dimension ($d=2$)', 'Interpreter', 'latex');
 
-leg = legend('Single ($S_{sing}$)', 'Polynomial ($S_{poly}$)', 'Multiple ($S_{multi}$)', 'Adaptive ($S_{adap}$)', '$\sqrt{N}/2.5$', ...
+strategy_legend = legend('Single ($S_{sing}$)', 'Polynomial ($S_{poly}$)', 'Multiple ($S_{multi}$)', 'Adaptive ($S_{adap}$)', '$\sqrt{N}/2.5$', ...
              'Location', 'northwest', 'Interpreter', 'latex');
-set(leg, 'FontSize', 10);
 
 yyaxis right
 ax.YColor = [0, 0, 0]; 
@@ -197,7 +210,7 @@ plot(N_exponents, Data.R(idx_d_low, :), '--s', 'Color', colors(5,:), ...
 % ylabel('Max Fiber Length $R$','Interpreter', 'latex');
 ylim([0, max(Data.R(idx_d_low, :))+1]); 
 
-% --- Panel 2: High Dimension (d=30) vs N ---
+% --- Panel 2: High Dimension (d=50) vs N ---
 subplot(1, 3, 2);
 hold on; grid on; box on;
 x_fit = linspace(min(log2(N_list)), max(log2(N_list)), 100);
@@ -228,7 +241,7 @@ plot(N_exponents, Data.R(idx_d_high, :), '--s', 'Color', colors(5,:), ...
 % ylabel('Max Fiber Length $R$','Interpreter', 'latex');
 ylim([0, max(Data.R(idx_d_high, :))+1]); 
 
-% --- Panel 3: Max Sample Size (N=2^16) vs d ---
+% --- Panel 3: Largest Base Lattice Size vs d ---
 subplot(1, 3, 3);
 hold on; grid on; box on;
 semilogy(d_vals, Data.S_single(:,idx_N_max), '-s', 'Color', c_single, 'LineWidth', lw, 'MarkerSize', ms);
@@ -251,3 +264,22 @@ ylabel('Max Fiber Length $R$','Interpreter', 'latex');
 ylim([0, max(Data.R(:,idx_N_max))+1]); 
 
 set(findall(gcf,'-property','FontSize'),'FontSize', 15);
+set(strategy_legend, 'FontSize', 10, 'ItemTokenSize', [24, 18]);
+if ~exist('figs', 'dir'), mkdir('figs'); end
+set(gcf, 'Color', 'w', 'PaperPositionMode', 'auto');
+print(gcf, fullfile('figs', 's_optimal.eps'), '-depsc', '-vector');
+
+function name = short_strategy_name(strategy)
+switch strategy
+    case 'Polynomial'
+        name = 'Poly';
+    case 'Single_Prime_Lattice'
+        name = 'Single';
+    case 'Multi_Prime_CRT_Greedy'
+        name = 'Greedy';
+    case 'Multi_Prime_CRT_Theoretical'
+        name = 'CRT';
+    otherwise
+        name = strategy;
+end
+end

@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Preserve the EPS files used by the manuscript byte for byte.
+figs/*.eps binary
+functions/cbc_precision/native/win64/licenses/*.txt -text -whitespace

@@ -1,4 +1,4 @@
-function [Y, S, S_crt_bound] = search_crt_shifts(d, A, fibers, R, t)
+function [Y, S, S_crt_bound, strategy_used] = search_crt_shifts(d, A, fibers, R, t)
 % SEARCH_CRT_SHIFTS Constructs shifts using single-prime lattice and CRT strategies.
 %
 % Purpose:
@@ -17,8 +17,10 @@ function [Y, S, S_crt_bound] = search_crt_shifts(d, A, fibers, R, t)
 % Outputs:
 %   Y           - [Matrix, S x d] The constructed shift matrix Y.
 %   S           - [Integer] The effective total number of shifts S.
-%   S_crt_bound - [Integer] The theoretical multi-prime CRT bound for S.
+%   S_crt_bound - [Integer] Number of distinct shifts in the CRT fallback.
+%   strategy_used - Name of the construction that returned Y.
 
+strategy_used = 'Trivial';
 if R == 1
     S = 1;
     S_crt_bound = 1;
@@ -27,6 +29,12 @@ if R == 1
 end
 
 H = extract_differences(A, fibers);
+if isempty(H)
+    S = 1;
+    S_crt_bound = 1;
+    Y = zeros(1, d);
+    return;
+end
 z = construct_projection_vector(H);
 z = z(:);
 X = abs(H * z);
@@ -35,41 +43,22 @@ if any(X == 0)
     error('Mathematical Error: h*z = 0 found. Projection vector z is invalid.');
 end
 
-V = max(X);
-ln_V = log(V);
-c_constant = 0.32; % Rigorously corrected based on Rosser and Schoenfeld prime bounds
+[prime_list_crt, S_crt_bound] = prepare_crt_fallback(z, X, R, t);
+p_candidate = next_prime(max(R, 2));
 
-p1_lower_bound = ceil(2 * (R - 1) * ln_V / (c_constant * t));
-p1 = max(p1_lower_bound, 2);
-
-num_primes_k = ceil(2 * (R - 1) * ln_V / (t * log(p1)));
-prime_list_crt = next_k_primes(p1, num_primes_k);
-S_crt_bound = sum(prime_list_crt);
-
-start_p = max(R, 2);
-p_candidate = next_prime(start_p);
-search_cap = max(V + 1, S_crt_bound + 1);
-
-while p_candidate <= search_cap
-    if ~isprime(p_candidate)
-        p_candidate = next_prime(p_candidate);
-    end
-
+while p_candidate <= S_crt_bound
     if all(mod(X, p_candidate) ~= 0)
         % Success! Single prime found.
         S = p_candidate;
         Y = mod((0:S-1)' * z', S) / S; 
+        strategy_used = 'Single_Prime_Lattice';
         return;
-    end
-
-    if p_candidate > S_crt_bound
-        % Fallback to multi-prime CRT union lattice
-        Y = generate_union_lattices(z, prime_list_crt);
-        S = S_crt_bound;
-        break;
     end
 
     p_candidate = next_prime(p_candidate + 1);
 end
 
+Y = generate_union_lattices(z, prime_list_crt);
+S = S_crt_bound;
+strategy_used = 'Multi_Prime_CRT_Theoretical';
 end
