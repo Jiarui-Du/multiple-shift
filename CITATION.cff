@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite this release."
+title: "A deterministic multiple-shift lattice algorithm for function approximation in Korobov and half-period cosine spaces"
+type: software
+authors:
+  - family-names: Du
+    given-names: Jiarui
+  - family-names: Dick
+    given-names: Josef
+version: "paper-revision-1"
+repository-code: "https://github.com/Jiarui-Du/multiple-shift"
+url: "https://github.com/Jiarui-Du/multiple-shift/releases/tag/paper-revision-1"

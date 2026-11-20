@@ -53,21 +53,14 @@ for j = 1:d
     % Identify forbidden values for z_j
     is_integer_div = (mod(-prefix_sums, pivots) == 0);
     forbidden_values = -prefix_sums(is_integer_div) ./ pivots(is_integer_div);
-    forbidden_values = unique(forbidden_values);
-    
-    % Step 4: Find the smallest integer not in forbidden_values
-    num_forbidden = length(forbidden_values);
-    max_val = num_forbidden + 1;
-    
-    pos_vals = 1:max_val;
-    neg_vals = -pos_vals;
-    search_seq = [0, reshape([pos_vals; neg_vals], 1, [])];
-    
-    for candidate = search_seq
-        if ~ismember(candidate, forbidden_values)
-            z(j) = candidate;
-            break;
-        end
-    end
+    % Mark only the candidate range; duplicate forbidden values need no sorting.
+    radius = ceil(sum(rows_in_Hj) / 2);
+    blocked = false(2 * radius + 1, 1);
+    forbidden_values = forbidden_values(abs(forbidden_values) <= radius);
+    blocked(forbidden_values + radius + 1) = true;
+
+    % Keep the original order 0, 1, -1, 2, -2, ... .
+    search_seq = [0, reshape([1:radius; -(1:radius)], 1, [])];
+    z(j) = search_seq(find(~blocked(search_seq + radius + 1), 1));
 end
 end

@@ -1,0 +1,18 @@
+{
+  "matlab": "24.2.0.2806996 (R2024b) Update 3",
+  "compiler": "MinGW64 Compiler (C)",
+  "compiler_version": "8.1.0",
+  "flint_version": "3.3.1",
+  "flint_dll": "libflint.21.0.0-67b518837b39088fce997dec2b675a6a.dll",
+  "bits_default": 113,
+  "threads_default": 8,
+  "runtime_directory": "runtime",
+  "python_required": false,
+  "advanpix_required": false,
+  "source": "fastrank1pt_arf_mex.c + acf_point_native.c",
+  "flags": [
+    "CFLAGS=$CFLAGS -std=c11 -fopenmp -Wall -Wextra -Werror -fno-fast-math",
+    "COPTIMFLAGS=-O3 -DNDEBUG -fno-fast-math",
+    "LDFLAGS=$LDFLAGS -fopenmp"
+  ]
+}

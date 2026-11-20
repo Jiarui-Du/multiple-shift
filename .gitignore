@@ -1,0 +1,5 @@
+/.upstream/
+/functions/MultipleRank1Lattice/
+/functions/generatorp.m
+/functions/powmod.m
+/functions/cbc_precision/native/win64/runtime/
